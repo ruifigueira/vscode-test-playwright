@@ -1,0 +1,33 @@
+{
+  "name": "vscode-test-playwright",
+  "version": "0.0.1",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@types/ws": "^8.5.12",
+    "typescript": "^5.5.4",
+    "vscode": "^1.1.37"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.46.1",
+    "@vscode/test-electron": "^2.4.1",
+    "ws": "^8.18.0"
+  }
+}

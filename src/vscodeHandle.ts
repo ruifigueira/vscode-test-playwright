@@ -1,0 +1,221 @@
+import type * as vscode from 'vscode';
+import type { EventEmitter, Event } from 'vscode';
+import { MessageRequestDataMap, MessageResponseDataMap, ResponseMessage, VSCodeHandleObject } from './protocol';
+import { WebSocketServer, WebSocket, AddressInfo } from 'ws';
+import { createServer } from 'http';
+
+export type VSCode = typeof vscode;
+
+export type Unboxed<Arg> =
+  Arg extends ObjectHandle<infer T> ? T :
+  Arg extends [infer A0] ? [Unboxed<A0>] :
+  Arg extends [infer A0, infer A1] ? [Unboxed<A0>, Unboxed<A1>] :
+  Arg extends [infer A0, infer A1, infer A2] ? [Unboxed<A0>, Unboxed<A1>, Unboxed<A2>] :
+  Arg extends [infer A0, infer A1, infer A2, infer A3] ? [Unboxed<A0>, Unboxed<A1>, Unboxed<A2>, Unboxed<A3>] :
+  Arg extends Array<infer T> ? Array<Unboxed<T>> :
+  Arg extends object ? { [Key in keyof Arg]: Unboxed<Arg[Key]> } :
+  Arg;
+export type VSCodeFunction0<R> = () => R | Thenable<R>;
+export type VSCodeFunction<Arg, R> = (arg: Unboxed<Arg>) => R | Thenable<R>;
+export type VSCodeFunctionOn<On, Arg2, R> = (on: On, arg2: Unboxed<Arg2>) => R | Thenable<R>;
+
+export type VSCodeHandle<T> = T extends EventEmitter<infer R> ? EventEmitterHandle<R> : ObjectHandle<T>;
+
+export class VSCodeEvaluator {
+  private _lastId = 0;
+  private _pending = new Map<number, { resolve: Function, reject: Function }>();
+  private _cache = new Map<number, ObjectHandle<unknown>>();
+  private _wsServer: WebSocketServer;
+  private _initialized: Promise<void>;
+  private _socketPromise: Promise<WebSocket>;
+  private _listeners = new Map<number, Set<((event?: any) => any)>>();
+
+  private _responseHandler = (json: string) => {
+    const { op, id, data } = JSON.parse(json) as ResponseMessage;
+
+    if (op === 'dispatchEvent') {
+      const { objectId, event } = data as MessageResponseDataMap['dispatchEvent'];
+      const listeners = this._listeners.get(objectId);
+      if (listeners) {
+        for (const listener of listeners)
+          listener(event);
+      }
+      return;
+    }
+
+    if (id && !this._pending.has(id))
+      throw new Error(`Could not find promise for request with ID ${id}`);
+    const { resolve, reject } = this._pending.get(id);
+    this._pending.delete(id);
+
+    switch (op) {
+      case 'release':
+      case 'registerEvent':
+      case 'unregisterEvent': {
+        resolve();
+        return;
+      }
+      case 'invokeMethod': {
+        const { error, result } = data as MessageResponseDataMap['invokeMethod'];
+        if (error) {
+          const e = new Error(error.message);
+          e.stack = error.stack;
+          reject(e);
+        } else {
+          resolve({ result });
+        }
+        return;
+      }
+    }
+  };
+
+  constructor() {
+    const server = createServer();
+    this._wsServer = new WebSocketServer({ server });
+    this._initialized = new Promise<void>(r => server.listen(0, r));
+    this._socketPromise = new Promise<WebSocket>((resolve, reject) => {
+      this._wsServer.once('connection', ws => resolve(ws));
+      this._wsServer.once('error', reject);
+    });
+    this._socketPromise.then(socket => {
+      socket.on('message', data => this._responseHandler(data.toString()));
+    });
+    this._cache.set(0, new ObjectHandle(0, this));
+  }
+
+  rootHandle(): ObjectHandle<VSCode> {
+    return this._cache.get(0) as ObjectHandle<VSCode>;
+  }
+
+  async port() {
+    await this._initialized;
+    return (this._wsServer.address() as AddressInfo).port;
+  }
+
+  async evaluate<R>(objectId: number, returnHandle: false, fn: VSCodeFunctionOn<any, void, R>): Promise<R>;
+  async evaluate<R>(objectId: number, returnHandle: true, fn: VSCodeFunctionOn<any, void, R>): Promise<VSCodeHandle<R>>;
+  async evaluate<R, Arg>(objectId: number, returnHandle: false, fn: VSCodeFunctionOn<any, Arg, R>, arg?: Arg): Promise<R>;
+  async evaluate<R, Arg>(objectId: number, returnHandle: true, fn: VSCodeFunctionOn<any, Arg, R>, arg?: Arg): Promise<VSCodeHandle<R>>;
+  async evaluate<R, Arg>(objectId: number, returnHandle: boolean, fn: VSCodeFunctionOn<any, Arg, R>, arg?: Arg) {
+    function toParam(arg: any): any {
+      if (['string', 'number', 'boolean', 'null', 'undefined'].includes(typeof arg))
+        return arg;
+      if (arg instanceof ObjectHandle)
+        return { __vscodeHandle: arg instanceof EventEmitterHandle ? 'eventEmitter' : true, objectId: arg.objectId };
+      if (Array.isArray(arg))
+        return arg.map(toParam);
+      return Object.fromEntries(Object.entries(arg).map(([k, v]) => [k, toParam(v)]));
+    }
+
+    const params = arg !== undefined ? [toParam(arg)] : [];
+    const { result } = await this._sendAndWait('invokeMethod', { objectId, returnHandle, fn: fn.toString(), params });
+    if (!returnHandle)
+      return result;
+
+    const handleObj = result as VSCodeHandleObject;
+    let handle = this._cache.get(handleObj.objectId);
+    if (!handle) {
+      handle = new (handleObj.__vscodeHandle === 'eventEmitter' ? EventEmitterHandle : ObjectHandle)(handleObj.objectId, this);
+      this._cache.set(handleObj.objectId, handle);
+    }
+    return handle;
+  }
+
+  async addListener<R>(objectId: number, listener: (event: R) => any) {
+    if (!this._cache.has(objectId))
+      throw new Error(`No handle with id ${objectId}`);
+    let listeners = this._listeners.get(objectId);
+    if (!listeners) {
+      listeners = new Set();
+      this._listeners.set(objectId, listeners);
+    }
+
+    if (listeners.has(listener))
+      return;
+
+    listeners.add(listener);
+    await this._sendAndWait('registerEvent', { objectId });
+  }
+
+  async removeListener<R>(objectId: number, listener: (event: R) => any) {
+    const listeners = this._listeners.get(objectId);
+    if (!listeners?.has(listener))
+      return
+    listeners.delete(listener);
+    await this._sendAndWait('unregisterEvent', { objectId });
+  }
+
+  async release(objectId: number) {
+    this._listeners.delete(objectId);
+    if (!this._cache.delete(objectId))
+      return;
+    await this._sendAndWait('release', { objectId });
+  }
+
+  async dispose() {
+    await Promise.all([...this._cache.keys()].map(objectId => this.release(objectId))).catch(() => {});
+    const socket = await this._socketPromise;
+    socket.removeListener('data', this._responseHandler);
+    this._wsServer.close();
+    for (const [id, { reject }] of this._pending.entries())
+      reject(new Error(`No response for request ${id} received from VSCode`));
+  }
+
+  private async _sendAndWait<K extends keyof MessageRequestDataMap>(op: K, data: MessageRequestDataMap[K]): Promise<MessageResponseDataMap[K]> {
+    const socket = await this._socketPromise;
+    const id = ++this._lastId;
+    socket.send(JSON.stringify({ op, id, data }));
+    return await new Promise((resolve, reject) => this._pending.set(id, { resolve, reject }));
+  }
+}
+
+export class ObjectHandle<T = VSCode> {
+  readonly objectId: number;
+  protected _evaluator: VSCodeEvaluator;
+  private _disposed = false;
+
+  constructor(objectId: number, evaluator: VSCodeEvaluator) {
+    this.objectId = objectId;
+    this._evaluator = evaluator;
+  }
+
+  evaluate<R>(vscodeFunction: VSCodeFunctionOn<T, void, R>): Promise<R>;
+  evaluate<R, Arg>(vscodeFunction: VSCodeFunctionOn<T, Arg, R>, arg: Arg): Promise<R>;
+  evaluate<R, Arg>(vscodeFunction: VSCodeFunctionOn<T, Arg, R>, arg?: Arg): Promise<R> {
+    if (this._disposed)
+      throw new Error(`Handle is disposed`);
+    return this._evaluator.evaluate(this.objectId, false, vscodeFunction, arg);
+  }
+
+  evaluateHandle<R>(vscodeFunction: VSCodeFunctionOn<T, void, R>): Promise<VSCodeHandle<R>>;
+  evaluateHandle<R, Arg>(vscodeFunction: VSCodeFunctionOn<T, Arg, R>, arg: Arg): Promise<VSCodeHandle<R>>;
+  evaluateHandle<R, Arg>(vscodeFunction: VSCodeFunctionOn<T, Arg, R>, arg?: Arg): Promise<VSCodeHandle<R>> {
+    if (this._disposed)
+      throw new Error(`Handle is disposed`);
+    return this._evaluator.evaluate(this.objectId, true, vscodeFunction, arg);
+  }
+
+  dispose() {
+    this.release().catch(() => {});
+  }
+
+  async release() {
+    this._disposed = true;
+    await this._evaluator.release(this.objectId);
+  }
+}
+
+export class EventEmitterHandle<R> extends ObjectHandle<EventEmitter<R>> {
+
+  constructor(objectId: number, evaluator: VSCodeEvaluator) {
+    super(objectId, evaluator);
+  }
+
+  async addListener(e: (event: R) => any) {
+    await this._evaluator.addListener(this.objectId, e);
+  }
+
+  async removeListener(e: (event: R) => any) {
+    await this._evaluator.removeListener(this.objectId, e);
+  }
+}
