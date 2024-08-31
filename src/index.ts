@@ -4,8 +4,11 @@ import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as readline from 'readline';
+import type { EventEmitter } from 'events';
 import { type Disposable } from 'vscode';
 import { VSCode, VSCodeEvaluator, VSCodeFunctionOn, ObjectHandle, VSCodeHandle } from './vscodeHandle';
+import { WebSocket } from 'ws';
 export { expect } from '@playwright/test';
 
 export const defineConfig = baseDefineConfig<TestOptions>;
@@ -29,7 +32,6 @@ export type TestFixtures = {
 type InternalFixtures = {
   _evaluator: VSCodeEvaluator,
   _vscodeHandle: ObjectHandle<VSCode>,
-  _vscodeAppAndEvaluator: { electronApp: ElectronApplication, evaluator: VSCodeEvaluator },
   _createTempDir: () => Promise<string>;
 }
 
@@ -62,14 +64,56 @@ function getTraceMode(trace: TraceMode | 'retry-with-trace' | { mode: TraceMode;
   return traceMode;
 }
 
+function waitForLine(process: cp.ChildProcess, regex: RegExp): Promise<RegExpMatchArray> {
+  function addEventListener(
+    emitter: EventEmitter,
+    eventName: (string | symbol),
+    handler: (...args: any[]) => void) {
+    emitter.on(eventName, handler);
+    return { emitter, eventName, handler };
+  }
+
+  function removeEventListeners(listeners: Array<{
+      emitter: EventEmitter;
+      eventName: (string | symbol);
+      handler: (...args: any[]) => void;
+    }>) {
+    for (const listener of listeners)
+      listener.emitter.removeListener(listener.eventName, listener.handler);
+    listeners.splice(0, listeners.length);
+  }
+
+  return new Promise((resolve, reject) => {
+    const rl = readline.createInterface({ input: process.stderr! });
+    const failError = new Error('Process failed to launch!');
+    const listeners = [
+      addEventListener(rl, 'line', onLine),
+      addEventListener(rl, 'close', reject.bind(null, failError)),
+      addEventListener(process, 'exit', reject.bind(null, failError)),
+      // It is Ok to remove error handler because we did not create process and there is another listener.
+      addEventListener(process, 'error', reject.bind(null, failError))
+    ];
+
+    function onLine(line: string) {
+      const match = line.match(regex);
+      if (!match)
+        return;
+      cleanup();
+      resolve(match);
+    }
+
+    function cleanup() {
+      removeEventListeners(listeners);
+    }
+  });
+}
+
 export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
   vscodeVersion: ['insiders', { option: true }],
   extensionDevelopmentPath: [undefined, { option: true }],
   extensions: [undefined, { option: true }],
   baseDir: [async ({ _createTempDir }, use) => await use(await _createTempDir()), { option: true }],
-  _vscodeAppAndEvaluator: [async ({ vscodeVersion, extensionDevelopmentPath, extensions, baseDir, _createTempDir, trace }, use, testInfo) => {
-    const evaluator = new VSCodeEvaluator();
-
+  electronApp: [async ({ vscodeVersion, extensionDevelopmentPath, extensions, baseDir, _createTempDir, trace }, use, testInfo) => {
     // remove all VSCODE_* environment variables, otherwise it fails to load custom webviews with the following error:
     // InvalidStateError: Failed to register a ServiceWorker: The document is in an invalid state
     const env = { ...process.env } as Record<string, string>;
@@ -108,10 +152,7 @@ export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
 
     const electronApp = await _electron.launch({
       executablePath: vscodePath,
-      env: {
-        ...env,
-        PW_VSCODE_TEST_PORT: (await evaluator.port()).toString(),
-      },
+      env,
       args: [
         // Stolen from https://github.com/microsoft/vscode-test/blob/0ec222ef170e102244569064a12898fb203e5bb7/lib/runTest.ts#L126-L160
         // https://github.com/microsoft/vscode/issues/84238
@@ -138,7 +179,7 @@ export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
       await electronApp.context().tracing.start({ screenshots, snapshots, title: testInfo.title });
     }
 
-    await use({ electronApp, evaluator });
+    await use(electronApp);
 
     if (captureTrace) {
       const testFailed = testInfo.status !== testInfo.expectedStatus;
@@ -150,7 +191,6 @@ export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
       }
     }
 
-    await evaluator.dispose();
     await electronApp.close();
 
     const logPath = path.join(defaultCachePath, 'user-data', 'logs');
@@ -160,18 +200,23 @@ export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
     }
   }, { timeout: 0 }],
 
-  electronApp: async ({ _vscodeAppAndEvaluator }, use) => {
-    const { electronApp } = _vscodeAppAndEvaluator;
-    await use(electronApp);
-  },
-
-  workbox: async ({ _vscodeAppAndEvaluator }, use) => {
-    const { electronApp } = _vscodeAppAndEvaluator;
+  workbox: async ({ electronApp }, use) => {
     await use(await electronApp.firstWindow());
   },
 
-  _evaluator: async ({ _vscodeAppAndEvaluator }, use) => {
-    const { evaluator } = _vscodeAppAndEvaluator;
+  _evaluator: async ({ playwright, electronApp }, use) => {
+    const electronAppImpl = await (playwright as any)._toImpl(electronApp);
+    // check recent logs or wait for URL to access VSCode test server
+    const vscodeTestServerRegExp = /^VSCodeTestServer listening on (http:\/\/.*)$/;
+    const process = electronAppImpl._process as cp.ChildProcess;
+    const recentLogs = electronAppImpl._nodeConnection._browserLogsCollector.recentLogs() as string[];
+    let [match] = recentLogs.map(s => s.match(vscodeTestServerRegExp)).filter(Boolean);
+    if (!match) {
+      match = await waitForLine(process, vscodeTestServerRegExp);
+    }
+    const ws = new WebSocket(match[1]);
+    await new Promise(r => ws.once('open', r));
+    const evaluator = new VSCodeEvaluator(ws);
     await use(evaluator);
   },
 

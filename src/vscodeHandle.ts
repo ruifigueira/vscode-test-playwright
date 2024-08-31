@@ -1,8 +1,7 @@
 import type * as vscode from 'vscode';
-import type { EventEmitter, Event } from 'vscode';
+import type { EventEmitter } from 'vscode';
+import { WebSocket } from 'ws';
 import { MessageRequestDataMap, MessageResponseDataMap, ResponseMessage, VSCodeHandleObject } from './protocol';
-import { WebSocketServer, WebSocket, AddressInfo } from 'ws';
-import { createServer } from 'http';
 
 export type VSCode = typeof vscode;
 
@@ -23,11 +22,9 @@ export type VSCodeHandle<T> = T extends EventEmitter<infer R> ? EventEmitterHand
 
 export class VSCodeEvaluator {
   private _lastId = 0;
+  private _ws: WebSocket;
   private _pending = new Map<number, { resolve: Function, reject: Function }>();
   private _cache = new Map<number, ObjectHandle<unknown>>();
-  private _wsServer: WebSocketServer;
-  private _initialized: Promise<void>;
-  private _socketPromise: Promise<WebSocket>;
   private _listeners = new Map<number, Set<((event?: any) => any)>>();
 
   private _responseHandler = (json: string) => {
@@ -69,27 +66,14 @@ export class VSCodeEvaluator {
     }
   };
 
-  constructor() {
-    const server = createServer();
-    this._wsServer = new WebSocketServer({ server });
-    this._initialized = new Promise<void>(r => server.listen(0, r));
-    this._socketPromise = new Promise<WebSocket>((resolve, reject) => {
-      this._wsServer.once('connection', ws => resolve(ws));
-      this._wsServer.once('error', reject);
-    });
-    this._socketPromise.then(socket => {
-      socket.on('message', data => this._responseHandler(data.toString()));
-    });
+  constructor(ws: WebSocket) {
+    this._ws = ws;
+    this._ws.on('message', data => this._responseHandler(data.toString()));
     this._cache.set(0, new ObjectHandle(0, this));
   }
 
   rootHandle(): ObjectHandle<VSCode> {
     return this._cache.get(0) as ObjectHandle<VSCode>;
-  }
-
-  async port() {
-    await this._initialized;
-    return (this._wsServer.address() as AddressInfo).port;
   }
 
   async evaluate<R>(objectId: number, returnHandle: false, fn: VSCodeFunctionOn<any, void, R>): Promise<R>;
@@ -154,17 +138,14 @@ export class VSCodeEvaluator {
 
   async dispose() {
     await Promise.all([...this._cache.keys()].map(objectId => this.release(objectId))).catch(() => {});
-    const socket = await this._socketPromise;
-    socket.removeListener('data', this._responseHandler);
-    this._wsServer.close();
+    this._ws.removeListener('data', this._responseHandler);
     for (const [id, { reject }] of this._pending.entries())
       reject(new Error(`No response for request ${id} received from VSCode`));
   }
 
   private async _sendAndWait<K extends keyof MessageRequestDataMap>(op: K, data: MessageRequestDataMap[K]): Promise<MessageResponseDataMap[K]> {
-    const socket = await this._socketPromise;
     const id = ++this._lastId;
-    socket.send(JSON.stringify({ op, id, data }));
+    this._ws.send(JSON.stringify({ op, id, data }));
     return await new Promise((resolve, reject) => this._pending.set(id, { resolve, reject }));
   }
 }
