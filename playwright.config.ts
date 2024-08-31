@@ -1,16 +1,16 @@
-import { defineConfig } from 'vscode-test-playwright';
+import { defineConfig } from '@playwright/test';
 import path from 'path';
+import type { VSCodeTestOptions, VSCodeWorkerOptions } from 'vscode-test-playwright';
 
-export default defineConfig({
+export default defineConfig<VSCodeTestOptions, VSCodeWorkerOptions>({
   testDir: './tests',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: 'html',
-  globalSetup: path.join(__dirname, 'tests', 'global-setup.ts'),
   use: {
-    trace: 'on-first-retry',
+    vscodeTrace: 'on',
     extensionDevelopmentPath: path.join(__dirname, 'tests', 'extension')
   },
   projects: [

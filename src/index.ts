@@ -11,16 +11,18 @@ import { VSCode, VSCodeEvaluator, VSCodeFunctionOn, ObjectHandle, VSCodeHandle }
 import { WebSocket } from 'ws';
 export { expect } from '@playwright/test';
 
-export const defineConfig = baseDefineConfig<TestOptions>;
-
-export type TestOptions = {
+export type VSCodeWorkerOptions = {
   vscodeVersion: string;
-  extensionDevelopmentPath?: string;
   extensions?: string | string[];
-  baseDir: string,
+  vscodeTrace: TraceMode | { mode: TraceMode, snapshots?: boolean, screenshots?: boolean, sources?: boolean, attachments?: boolean };
+}
+
+export type VSCodeTestOptions = {
+  extensionDevelopmentPath?: string;
+  baseDir: string;
 };
 
-export type TestFixtures = {
+type VSCodeTestFixtures = {
   electronApp: ElectronApplication,
   workbox: Page,
   evaluateInVSCode<R>(vscodeFunction: VSCodeFunctionOn<VSCode, void, R>): Promise<R>;
@@ -29,10 +31,14 @@ export type TestFixtures = {
   evaluateHandleInVSCode<R, Arg>(vscodeFunction: VSCodeFunctionOn<VSCode, Arg, R>, arg: Arg): Promise<VSCodeHandle<R>>,
 };
 
-type InternalFixtures = {
+type InternalWorkerFixtures = {
+  _createTempDir: () => Promise<string>;
+  _vscodeInstall: { installPath: string, cachePath: string };
+}
+
+type InternalTestFixtures = {
   _evaluator: VSCodeEvaluator,
   _vscodeHandle: ObjectHandle<VSCode>,
-  _createTempDir: () => Promise<string>;
 }
 
 function shouldCaptureTrace(traceMode: TraceMode, testInfo: TestInfo) {
@@ -64,6 +70,7 @@ function getTraceMode(trace: TraceMode | 'retry-with-trace' | { mode: TraceMode;
   return traceMode;
 }
 
+// adapted from https://github.com/microsoft/playwright/blob/a6b320e36224f70ad04fd520503c230d5956ba66/packages/playwright-core/src/server/electron/electron.ts#L294-L320
 function waitForLine(process: cp.ChildProcess, regex: RegExp): Promise<RegExpMatchArray> {
   function addEventListener(
     emitter: EventEmitter,
@@ -108,23 +115,18 @@ function waitForLine(process: cp.ChildProcess, regex: RegExp): Promise<RegExpMat
   });
 }
 
-export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
-  vscodeVersion: ['insiders', { option: true }],
+export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & InternalTestFixtures, VSCodeWorkerOptions & InternalWorkerFixtures>({
+  vscodeVersion: ['insiders', { option: true, scope: 'worker' }],
+  extensions: [undefined, { option: true, scope: 'worker' }],
+  vscodeTrace: ['off', { option: true, scope: 'worker' }],
   extensionDevelopmentPath: [undefined, { option: true }],
-  extensions: [undefined, { option: true }],
   baseDir: [async ({ _createTempDir }, use) => await use(await _createTempDir()), { option: true }],
-  electronApp: [async ({ vscodeVersion, extensionDevelopmentPath, extensions, baseDir, _createTempDir, trace }, use, testInfo) => {
-    // remove all VSCODE_* environment variables, otherwise it fails to load custom webviews with the following error:
-    // InvalidStateError: Failed to register a ServiceWorker: The document is in an invalid state
-    const env = { ...process.env } as Record<string, string>;
-    for (const prop in env) {
-      if (/^VSCODE_/i.test(prop))
-        delete env[prop];
-    }
 
-    const defaultCachePath = await _createTempDir();
-    const vscodePath = await downloadAndUnzipVSCode({ version: vscodeVersion, reporter: new SilentReporter() });
-    const [cliPath] = resolveCliArgsFromVSCodeExecutablePath(vscodePath);
+  _vscodeInstall: [async ({ _createTempDir, vscodeVersion, extensions }, use, workerInfo) => {
+    const cachePath = await _createTempDir();
+    const installBasePath = path.join(process.cwd(), '.vscode-test', `worker-${workerInfo.workerIndex}`);
+    const installPath = await downloadAndUnzipVSCode({ cachePath: installBasePath, version: vscodeVersion });
+    const [cliPath] = resolveCliArgsFromVSCodeExecutablePath(installPath);
 
     if (extensions) {
       await new Promise<void>((resolve, reject) => {
@@ -132,8 +134,8 @@ export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
         const subProcess = cp.spawn(
           cliPath,
           [
-            `--extensions-dir=${path.join(defaultCachePath, 'extensions')}`,
-            `--user-data-dir=${path.join(defaultCachePath, 'user-data')}`,
+            `--extensions-dir=${path.join(cachePath, 'extensions')}`,
+            `--user-data-dir=${path.join(cachePath, 'user-data')}`,
             ...extensions.flatMap(extension => ['--install-extension', extension])
           ],
           {
@@ -148,10 +150,25 @@ export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
             reject(new Error(`Failed to install extensions: code = ${code}, signal = ${signal}`));
         });
       });
+
+    }
+
+    await use({ installPath, cachePath });
+  }, { timeout: 0, scope: 'worker' }],
+
+  electronApp: [async ({ extensionDevelopmentPath, baseDir, _vscodeInstall, vscodeTrace, trace }, use, testInfo) => {
+    const { installPath, cachePath } = _vscodeInstall;
+
+    // remove all VSCODE_* environment variables, otherwise it fails to load custom webviews with the following error:
+    // InvalidStateError: Failed to register a ServiceWorker: The document is in an invalid state
+    const env = { ...process.env } as Record<string, string>;
+    for (const prop in env) {
+      if (/^VSCODE_/i.test(prop))
+        delete env[prop];
     }
 
     const electronApp = await _electron.launch({
-      executablePath: vscodePath,
+      executablePath: installPath,
       env,
       args: [
         // Stolen from https://github.com/microsoft/vscode-test/blob/0ec222ef170e102244569064a12898fb203e5bb7/lib/runTest.ts#L126-L160
@@ -164,18 +181,18 @@ export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
         '--skip-welcome',
         '--skip-release-notes',
         '--disable-workspace-trust',
-        `--extensions-dir=${path.join(defaultCachePath, 'extensions')}`,
-        `--user-data-dir=${path.join(defaultCachePath, 'user-data')}`,
+        `--extensions-dir=${path.join(cachePath, 'extensions')}`,
+        `--user-data-dir=${path.join(cachePath, 'user-data')}`,
         `--extensionTestsPath=${path.join(__dirname, 'injected', 'index')}`,
         ...(extensionDevelopmentPath ? [`--extensionDevelopmentPath=${extensionDevelopmentPath}`] : []),
         baseDir,
       ],
     });
 
-    const traceMode = getTraceMode(trace);
+    const traceMode = getTraceMode(vscodeTrace);
     const captureTrace = shouldCaptureTrace(traceMode, testInfo);
     if (captureTrace) {
-      const { screenshots, snapshots } = typeof trace !== 'string' ? trace : { screenshots: true, snapshots: true };
+      const { screenshots, snapshots } = typeof vscodeTrace !== 'string' ? vscodeTrace : { screenshots: true, snapshots: true };
       await electronApp.context().tracing.start({ screenshots, snapshots, title: testInfo.title });
     }
 
@@ -185,15 +202,17 @@ export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
       const testFailed = testInfo.status !== testInfo.expectedStatus;
       const shouldAbandonTrace = !testFailed && (traceMode === 'retain-on-failure' || traceMode === 'retain-on-first-failure');
       if (!shouldAbandonTrace) {
-        const tracePath = testInfo.outputPath('trace-vscode.zip');
+        // if default trace is not off, use vscode-trace to avoid conflicts
+        const traceName = getTraceMode(trace) === 'off' ? 'trace' : 'vscode-trace';
+        const tracePath = testInfo.outputPath(`${traceName}.zip`);
         await electronApp.context().tracing.stop({ path: tracePath });
-        testInfo.attachments.push({ name: 'trace-vscode', path: tracePath, contentType: 'application/zip' });
+        testInfo.attachments.push({ name: traceName, path: tracePath, contentType: 'application/zip' });
       }
     }
 
     await electronApp.close();
 
-    const logPath = path.join(defaultCachePath, 'user-data', 'logs');
+    const logPath = path.join(cachePath, 'user-data', 'logs');
     if (fs.existsSync(logPath)) {
       const logOutputPath = test.info().outputPath('vscode-logs');
       await fs.promises.cp(logPath, logOutputPath, { recursive: true });
@@ -241,7 +260,7 @@ export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
       handle.dispose();
   },
 
-  _createTempDir: async ({ }, use) => {
+  _createTempDir: [async ({ }, use) => {
     const tempDirs: string[] = [];
     await use(async () => {
       const tempDir = await fs.promises.realpath(await fs.promises.mkdtemp(path.join(os.tmpdir(), 'pwtest-')));
@@ -251,5 +270,5 @@ export const test = base.extend<TestFixtures & TestOptions & InternalFixtures>({
     });
     for (const tempDir of tempDirs)
       await fs.promises.rm(tempDir, { recursive: true });
-  },
+  }, { scope: 'worker' }],
 });
