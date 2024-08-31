@@ -11,7 +11,7 @@ export default defineConfig({
   globalSetup: path.join(__dirname, 'tests', 'global-setup.ts'),
   use: {
     trace: 'on-first-retry',
-    extensionDevelopmentPath: path.join(__dirname, 'tests', 'extensions', 'vscode-extension-samples')
+    extensionDevelopmentPath: path.join(__dirname, 'tests', 'extension')
   },
   projects: [
     {
