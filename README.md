@@ -70,6 +70,8 @@ test('should show a message', async ({ workbox, evaluateInVSCode }) => {
 npx playwright test
 ```
 
+Generated report will include playwright traces from VS Code, which can be very helpful to identify issues of locators for UI elements.
+
 ## API
 
 The following [fixtures](https://playwright.dev/docs/test-fixtures#creating-a-fixture) are available:
