@@ -6,7 +6,7 @@ It allows both VS Code API and UI to be tested simultaneously by combining:
 - [@vscode/test-electron](https://code.visualstudio.com/api/working-with-extensions/testing-extension#advanced-setup-your-own-runner) with a custom runner that exposes a server that allows evaluating code inside VS Code
 - [@playwright/test](https://playwright.dev/docs/writing-tests) that launches VSCode electron app and allows interactions with VS Code UI using VSCode, as well as evaluating functions in VS Code context
 
-> [!CAUTION]
+> [!NOTE]
 > Not to be confused with [Playwright Test for VS Code](https://github.com/microsoft/playwright-vscode).
 
 ## Quick Start

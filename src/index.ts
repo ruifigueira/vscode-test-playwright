@@ -157,6 +157,7 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
     await use({ installPath, cachePath });
   }, { timeout: 0, scope: 'worker' }],
 
+  // based on https://github.com/microsoft/playwright-vscode/blob/1d855b9a7aeca783223a7a9f8e3b01efbe8e16f2/tests-integration/tests/baseTest.ts
   electronApp: [async ({ extensionDevelopmentPath, baseDir, _vscodeInstall, vscodeTrace, trace }, use, testInfo) => {
     const { installPath, cachePath } = _vscodeInstall;
 
