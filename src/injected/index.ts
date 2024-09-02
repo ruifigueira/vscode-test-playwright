@@ -96,13 +96,15 @@ class VSCodeTestServer {
     this._send('registerEvent', id);
   }
 
-  private _release(id: number, { objectId }: { objectId?: number }) {
+  private _release(id: number, { objectId, dispose }: { objectId?: number, dispose?: boolean }) {
     const obj = this._objectsById.get(objectId);
     if (obj !== undefined) {
       this._objectsById.delete(objectId);
       this._idByObjects.delete(obj);
       this._eventEmitters.get(objectId)?.dispose();
       this._eventEmitters.delete(objectId);
+      if (dispose)
+        obj.dispose?.();
     }
     this._send('release', id);
   }

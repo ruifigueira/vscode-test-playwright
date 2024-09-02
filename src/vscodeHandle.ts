@@ -1,5 +1,5 @@
 import type * as vscode from 'vscode';
-import type { EventEmitter } from 'vscode';
+import type { EventEmitter, Disposable } from 'vscode';
 import { WebSocket } from 'ws';
 import { MessageRequestDataMap, MessageResponseDataMap, ResponseMessage, VSCodeHandleObject } from './protocol';
 
@@ -129,11 +129,11 @@ export class VSCodeEvaluator {
     await this._sendAndWait('unregisterEvent', { objectId });
   }
 
-  async release(objectId: number) {
+  async release(objectId: number, options?: { dispose?: boolean }) {
     this._listeners.delete(objectId);
     if (!this._cache.delete(objectId))
       return;
-    await this._sendAndWait('release', { objectId });
+    await this._sendAndWait('release', { objectId, ...options });
   }
 
   async dispose() {
@@ -153,7 +153,7 @@ export class VSCodeEvaluator {
 export class ObjectHandle<T = VSCode> {
   readonly objectId: number;
   protected _evaluator: VSCodeEvaluator;
-  private _disposed = false;
+  private _released = false;
 
   constructor(objectId: number, evaluator: VSCodeEvaluator) {
     this.objectId = objectId;
@@ -163,26 +163,23 @@ export class ObjectHandle<T = VSCode> {
   evaluate<R>(vscodeFunction: VSCodeFunctionOn<T, void, R>): Promise<R>;
   evaluate<R, Arg>(vscodeFunction: VSCodeFunctionOn<T, Arg, R>, arg: Arg): Promise<R>;
   evaluate<R, Arg>(vscodeFunction: VSCodeFunctionOn<T, Arg, R>, arg?: Arg): Promise<R> {
-    if (this._disposed)
-      throw new Error(`Handle is disposed`);
+    if (this._released)
+      throw new Error(`Handle is released`);
     return this._evaluator.evaluate(this.objectId, false, vscodeFunction, arg);
   }
 
   evaluateHandle<R>(vscodeFunction: VSCodeFunctionOn<T, void, R>): Promise<VSCodeHandle<R>>;
   evaluateHandle<R, Arg>(vscodeFunction: VSCodeFunctionOn<T, Arg, R>, arg: Arg): Promise<VSCodeHandle<R>>;
   evaluateHandle<R, Arg>(vscodeFunction: VSCodeFunctionOn<T, Arg, R>, arg?: Arg): Promise<VSCodeHandle<R>> {
-    if (this._disposed)
-      throw new Error(`Handle is disposed`);
+    if (this._released)
+      throw new Error(`Handle is released`);
     return this._evaluator.evaluate(this.objectId, true, vscodeFunction, arg);
   }
 
-  dispose() {
-    this.release().catch(() => {});
-  }
-
-  async release() {
-    this._disposed = true;
-    await this._evaluator.release(this.objectId);
+  release<O extends (T extends Disposable ? { dispose: boolean } : {})>(options?: O): Promise<void>;
+  async release(options?: { dispose?: boolean }) {
+    this._released = true;
+    await this._evaluator.release(this.objectId, options);
   }
 }
 

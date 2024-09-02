@@ -129,18 +129,21 @@ Notice that we can use `evaluate` function on a handle directly:
 await editorHandle.evaluate(editor => editor.document.getText())`
 ```
 
-All handles obtained with `evaluateHandleInVSCode` are disposed after each test.
-Nevertheless, it's possible to dispose an handle explicitly with:
+All handles obtained with `evaluateHandleInVSCode` are released after each test.
+Nevertheless, it's possible to release an handle explicitly with:
 
 ```ts
-await editorHandle.dispose();
+await editorHandle.release();
 ```
 
 This ensures the reference is released on VS Code side, so that VS Code can eventually clean its resources.
-Future evaluations using a disposed handle will fail.
+Future evaluations using a released handle will fail.
 
-> [!IMPORTANT]
-> Disposing a handle doesn't dispose its corresponding VS Code object, it only removes the reference from it.
+For disposable handles, it's also possible to dispose on release:
+
+```ts
+await disposableHandle.release({ dispose: true });
+```
 
 ### `EventEmitter` handles
 

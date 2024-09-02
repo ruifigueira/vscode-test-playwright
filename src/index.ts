@@ -1,14 +1,13 @@
-import { _electron, test as base, defineConfig as baseDefineConfig, TestInfo, TraceMode, type ElectronApplication, type Page } from '@playwright/test';
-import { downloadAndUnzipVSCode, resolveCliArgsFromVSCodeExecutablePath, SilentReporter } from '@vscode/test-electron';
+import { _electron, test as base, TestInfo, TraceMode, type ElectronApplication, type Page } from '@playwright/test';
+import { downloadAndUnzipVSCode, resolveCliArgsFromVSCodeExecutablePath } from '@vscode/test-electron';
 import * as cp from 'child_process';
+import type { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as readline from 'readline';
-import type { EventEmitter } from 'events';
-import { type Disposable } from 'vscode';
-import { VSCode, VSCodeEvaluator, VSCodeFunctionOn, ObjectHandle, VSCodeHandle } from './vscodeHandle';
 import { WebSocket } from 'ws';
+import { ObjectHandle, VSCode, VSCodeEvaluator, VSCodeFunctionOn, VSCodeHandle } from './vscodeHandle';
 export { expect } from '@playwright/test';
 
 export type VSCodeWorkerOptions = {
@@ -259,15 +258,14 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
   },
 
   evaluateHandleInVSCode: async ({ _vscodeHandle }, use) => {
-    const handles: Disposable[] = [];
+    const handles: ObjectHandle<unknown>[] = [];
     // @ts-ignore
     await use(async (fn, arg) => {
       const handle = await _vscodeHandle.evaluateHandle(fn, arg);
       handles.push(handle);
       return handle;
     });
-    for (const handle of handles)
-      handle.dispose();
+    await Promise.all(handles.map(h => h.release()));
   },
 
   _createTempDir: [async ({ }, use) => {

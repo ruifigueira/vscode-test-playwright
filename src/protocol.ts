@@ -7,6 +7,7 @@ export type MessageRequestDataMap = {
   };
   'release': {
     objectId?: number;
+    dispose?: boolean;
   };
   'registerEvent': {
     objectId?: number;
