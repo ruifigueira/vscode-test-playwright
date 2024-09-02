@@ -9,6 +9,25 @@ It allows both VS Code API and UI to be tested simultaneously by combining:
 > [!NOTE]
 > Not to be confused with [Playwright Test for VS Code](https://github.com/microsoft/playwright-vscode).
 
+## Core Features
+
+- Unified Test Runner:
+  - Integrates Playwright Test and VSCode extension tests into a single test suite
+  - Easy setup for running and debugging tests.
+- VSCode UI Automation:
+  - Enables direct interaction with VSCode UI elements using Playwright selectors.
+  - Supports common actions like clicking buttons, typing text, and navigating menus.
+- VSCode API Calls:
+  - Allows programmatic interaction with VSCode APIs to simulate user actions or access internal state.
+- Trace Generation:
+  - Captures detailed information about test execution, including screenshots, network requests, and console logs.
+  - Facilitates debugging and troubleshooting.
+
+  [![VS Code Trace](docs/assets/trace.png)](https://trace.playwright.dev/?trace=https://raw.githubusercontent.com/ruifigueira/vscode-test-playwright/main/docs/assets/trace.zip)
+
+- Inspector / Codegen (Experimental)
+  - Visualize and interact with VSCode UI elements in real time, and automatically generate Playwright code snippets for efficient test creation.
+
 ## Quick Start
 
 - Install `playwright@latest` and `vscode-test-playwright`
