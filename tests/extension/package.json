@@ -7,6 +7,18 @@
 	"engines": {
 		"vscode": "^1.74.0"
 	},
+  "contributes": {
+    "commands": [
+      {
+        "command": "example.helloWorld",
+        "title": "Say hello!"
+      },
+      {
+        "command": "example.showView",
+        "title": "Open a view"
+      }
+    ]
+  },
 	"main": "./extension.js",
 	"activationEvents": ["onStartupFinished"]
 }
