@@ -145,6 +145,9 @@ For disposable handles, it's also possible to dispose on release:
 await disposableHandle.release({ dispose: true });
 ```
 
+> [!NOTE]
+> Implicit handle release after each test won't dispose its references, so release with dispose must be explicit.
+
 ### `EventEmitter` handles
 
 An `EventEmitter` handle allows adding and removing local listeners that are triggered by remote events.
