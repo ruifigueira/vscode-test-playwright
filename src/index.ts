@@ -31,6 +31,10 @@ type VSCodeTestFixtures = {
   evaluateHandleInVSCode<R, Arg>(vscodeFunction: VSCodeFunctionOn<VSCode, Arg, R>, arg: Arg): Promise<VSCodeHandle<R>>,
 };
 
+type ExperimentalVSCodeTestFixtures = {
+  _enableRecorder: void;
+}
+
 type InternalWorkerFixtures = {
   _createTempDir: () => Promise<string>;
   _vscodeInstall: { installPath: string, cachePath: string };
@@ -115,7 +119,7 @@ function waitForLine(process: cp.ChildProcess, regex: RegExp): Promise<RegExpMat
   });
 }
 
-export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & InternalTestFixtures, VSCodeWorkerOptions & InternalWorkerFixtures>({
+export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & InternalTestFixtures& ExperimentalVSCodeTestFixtures, VSCodeWorkerOptions & InternalWorkerFixtures>({
   vscodeVersion: ['insiders', { option: true, scope: 'worker' }],
   extensions: [undefined, { option: true, scope: 'worker' }],
   vscodeTrace: ['off', { option: true, scope: 'worker' }],
@@ -225,6 +229,10 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
     await use(await electronApp.firstWindow());
   },
 
+  page: ({ workbox }, use) => use(workbox),
+
+  context: ({ electronApp }, use) => use(electronApp.context()),
+
   _evaluator: async ({ playwright, electronApp }, use) => {
     const electronAppImpl = await (playwright as any)._toImpl(electronApp);
     // check recent logs or wait for URL to access VSCode test server
@@ -273,4 +281,18 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
     for (const tempDir of tempDirs)
       await fs.promises.rm(tempDir, { recursive: true });
   }, { scope: 'worker' }],
+
+  _enableRecorder: [async ({ playwright, context }, use) => {
+    const skip = !!process.env.CI;
+    if (!skip) {
+      await (context as any)._enableRecorder({
+        language: 'playwright-test',
+        mode: 'recording',
+      });
+      const contextImpl = await (playwright as any)._toImpl(context);
+      await new Promise(resolve => contextImpl.recorderAppForTest.once('close', resolve));
+    }
+    await use();
+  }, { timeout: 0 }],
+
 });
