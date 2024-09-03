@@ -26,6 +26,7 @@ export class VSCodeEvaluator {
   private _pending = new Map<number, { resolve: Function, reject: Function }>();
   private _cache = new Map<number, ObjectHandle<unknown>>();
   private _listeners = new Map<number, Set<((event?: any) => any)>>();
+  private _page: any;
 
   private _responseHandler = (json: string) => {
     const { op, id, data } = JSON.parse(json) as ResponseMessage;
@@ -66,8 +67,9 @@ export class VSCodeEvaluator {
     }
   };
 
-  constructor(ws: WebSocket) {
+  constructor(ws: WebSocket, pageImpl: any) {
     this._ws = ws;
+    this._page = pageImpl;
     this._ws.on('message', data => this._responseHandler(data.toString()));
     this._cache.set(0, new ObjectHandle(0, this));
   }
@@ -92,7 +94,7 @@ export class VSCodeEvaluator {
     }
 
     const params = arg !== undefined ? [toParam(arg)] : [];
-    const { result } = await this._sendAndWait('invokeMethod', { objectId, returnHandle, fn: fn.toString(), params });
+    const { result } = await this._sendAndWaitWithTrace('invokeMethod', { objectId, returnHandle, fn: fn.toString(), params });
     if (!returnHandle)
       return result;
 
@@ -133,7 +135,7 @@ export class VSCodeEvaluator {
     this._listeners.delete(objectId);
     if (!this._cache.delete(objectId))
       return;
-    await this._sendAndWait('release', { objectId, ...options });
+    await this._sendAndWaitWithTrace('release', { objectId, ...options });
   }
 
   async dispose() {
@@ -147,6 +149,39 @@ export class VSCodeEvaluator {
     const id = ++this._lastId;
     this._ws.send(JSON.stringify({ op, id, data }));
     return await new Promise((resolve, reject) => this._pending.set(id, { resolve, reject }));
+  }
+
+  private async _sendAndWaitWithTrace<K extends keyof MessageRequestDataMap>(op: K, data: MessageRequestDataMap[K]): Promise<MessageResponseDataMap[K]> {
+    if (!this._page)
+      return this._sendAndWait(op, data);
+
+    const { monotonicTime, createGuid } = require('playwright-core/lib/utils');
+    const tracing = this._page.context().tracing;
+    const frame = this._page.mainFrame();
+    const metadata = {
+      id: `vscodecall@${(data as any).id ?? createGuid()}`,
+      startTime: monotonicTime(),
+      endTime: 0,
+      // prevents pause action from being written into calllogs
+      internal: false,
+      objectId: frame.guid,
+      pageId: this._page.guid,
+      frameId: frame.guid,
+      type: 'JSHandle',
+      method: (data as MessageRequestDataMap['invokeMethod'])?.returnHandle ? 'evaluateExpressionHandle' : 'evaluateExpression',
+      params: { op, data },
+      log: [] as string[],
+    };
+    await tracing.onBeforeCall(frame, metadata);
+    let error: any, result: any;
+    try {
+      result = await this._sendAndWait(op, data);
+      return result;
+    } catch (e) {
+      error = { error: { message: e.message, stack: e.stack, name: e.name } };
+    } finally {
+      await tracing.onAfterCall(frame, { ...metadata, endTime: monotonicTime(), error, result });
+    }
   }
 }
 

@@ -232,8 +232,9 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
 
   context: ({ electronApp }, use) => use(electronApp.context()),
 
-  _evaluator: async ({ playwright, electronApp }, use) => {
+  _evaluator: async ({ playwright, electronApp, page, vscodeTrace }, use, testInfo) => {
     const electronAppImpl = await (playwright as any)._toImpl(electronApp);
+    const pageImpl = await (playwright as any)._toImpl(page);
     // check recent logs or wait for URL to access VSCode test server
     const vscodeTestServerRegExp = /^VSCodeTestServer listening on (http:\/\/.*)$/;
     const process = electronAppImpl._process as cp.ChildProcess;
@@ -244,8 +245,11 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
     }
     const ws = new WebSocket(match[1]);
     await new Promise(r => ws.once('open', r));
-    const evaluator = new VSCodeEvaluator(ws);
+    const traceMode = getTraceMode(vscodeTrace);
+    const captureTrace = shouldCaptureTrace(traceMode, testInfo);
+    const evaluator = new VSCodeEvaluator(ws, captureTrace ? pageImpl : undefined);
     await use(evaluator);
+    ws.close();
   },
 
   _vscodeHandle: async ({ _evaluator }, use) => {
