@@ -153,7 +153,7 @@ export class VSCodeEvaluator {
 
   private async _sendAndWaitWithTrace<K extends keyof MessageRequestDataMap>(op: K, data: MessageRequestDataMap[K]): Promise<MessageResponseDataMap[K]> {
     if (!this._page)
-      return this._sendAndWait(op, data);
+      return await this._sendAndWait(op, data);
 
     const { monotonicTime, createGuid } = require('playwright-core/lib/utils');
     const tracing = this._page.context().tracing;
