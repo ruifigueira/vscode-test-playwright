@@ -53,3 +53,13 @@ test('should release and dispose handle for disposable', async ({ evaluateHandle
   await disposableHandle.release({ dispose: true });
   expect(await disposedHandle.evaluate(d => d.length)).toBe(1);
 });
+
+test('should throw', async ({ evaluateInVSCode, evaluateHandleInVSCode }) => {
+  await expect.soft(evaluateInVSCode(() => {
+    throw new Error('oops');
+  })).rejects.toThrowError('oops');
+
+  await expect.soft(evaluateHandleInVSCode(() => {
+    throw new Error('oops handle');
+  })).rejects.toThrowError('oops handle');
+});

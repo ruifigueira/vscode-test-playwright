@@ -179,6 +179,7 @@ export class VSCodeEvaluator {
       return result;
     } catch (e) {
       error = { error: { message: e.message, stack: e.stack, name: e.name } };
+      throw e;
     } finally {
       await tracing.onAfterCall(frame, { ...metadata, endTime: monotonicTime(), error, result });
     }
