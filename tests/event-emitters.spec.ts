@@ -11,7 +11,7 @@ test('should receive vscode events', async ({ evaluateHandleInVSCode }) => {
 });
 
 test('should handle multiple listeners', async ({ evaluateHandleInVSCode }) => {
-  const emitterHandle = await evaluateHandleInVSCode(vscode => new vscode.EventEmitter());
+  const emitterHandle = await evaluateHandleInVSCode(vscode => new vscode.EventEmitter<void>());
   let result: string[] = [];
   await emitterHandle.addListener(() => result.push(`hello`));
   await emitterHandle.addListener(() => result.push(`bye`));
@@ -20,7 +20,7 @@ test('should handle multiple listeners', async ({ evaluateHandleInVSCode }) => {
 });
 
 test('should remove listener', async ({ evaluateHandleInVSCode }) => {
-  const emitterHandle = await evaluateHandleInVSCode(vscode => new vscode.EventEmitter());
+  const emitterHandle = await evaluateHandleInVSCode(vscode => new vscode.EventEmitter<void>());
   let count = 0;
   const listener = () => {
     count++;
@@ -36,7 +36,7 @@ test('should remove listener', async ({ evaluateHandleInVSCode }) => {
 });
 
 test('should trigger active listeners when one is removed', async ({ evaluateHandleInVSCode }) => {
-  const emitterHandle = await evaluateHandleInVSCode(vscode => new vscode.EventEmitter());
+  const emitterHandle = await evaluateHandleInVSCode(vscode => new vscode.EventEmitter<void>());
   let result: string[] = [];
   const helloListener = () => result.push(`hello`);
   const byeListener = () => result.push(`bye`);

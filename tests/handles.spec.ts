@@ -10,7 +10,6 @@ test('should fail when calling released handle', async ({ evaluateHandleInVSCode
 
 test('should free remote object from released handle', async ({ evaluateHandleInVSCode, evaluateInVSCode }) => {
   const arrayHandle = await evaluateHandleInVSCode(() => [] as string[]);
-  // @ts-expect-error
   const refHandle = await evaluateHandleInVSCode((_, arr) => new WeakRef(arr), arrayHandle);
 
   expect(await refHandle.evaluate(ref => ref.deref())).toEqual([]);
