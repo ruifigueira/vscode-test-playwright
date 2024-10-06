@@ -16,11 +16,15 @@ class VSCodeTestServer {
   }
 
   async run() {
-    await new Promise<void>((resolve, reject) => {
-      this._ws.on('message', data => this._handleMessage(JSON.parse(data.toString())));
-      this._ws.on('error', reject);
-      this._ws.on('close', resolve);
-    }).finally(() => this.dispose());
+    await Promise.all([
+      // returning from run() will kill vscode before electron.close(), so we need to hang it until process exit
+      new Promise(resolve => process.on('exit', resolve)),
+      new Promise<void>((resolve, reject) => {
+        this._ws.on('message', data => this._handleMessage(JSON.parse(data.toString())));
+        this._ws.on('error', reject);
+        this._ws.on('close', resolve);
+      }).finally(() => this.dispose()),
+    ]);
   }
 
   dispose() {
