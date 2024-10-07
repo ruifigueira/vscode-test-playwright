@@ -196,9 +196,10 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
 
     const traceMode = getTraceMode(vscodeTrace);
     const captureTrace = shouldCaptureTrace(traceMode, testInfo);
+    const context = electronApp.context();
     if (captureTrace) {
       const { screenshots, snapshots } = typeof vscodeTrace !== 'string' ? vscodeTrace : { screenshots: true, snapshots: true };
-      await electronApp.context().tracing.start({ screenshots, snapshots, title: testInfo.title });
+      await context.tracing.start({ screenshots, snapshots, title: testInfo.title });
     }
 
     await use(electronApp);
@@ -210,7 +211,7 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
         // if default trace is not off, use vscode-trace to avoid conflicts
         const traceName = getTraceMode(trace) === 'off' ? 'trace' : 'vscode-trace';
         const tracePath = testInfo.outputPath(`${traceName}.zip`);
-        await electronApp.context().tracing.stop({ path: tracePath });
+        await context.tracing.stop({ path: tracePath });
         testInfo.attachments.push({ name: traceName, path: tracePath, contentType: 'application/zip' });
       }
     }
@@ -232,9 +233,9 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
 
   context: ({ electronApp }, use) => use(electronApp.context()),
 
-  _evaluator: async ({ playwright, electronApp, page, vscodeTrace }, use, testInfo) => {
+  _evaluator: async ({ playwright, electronApp, workbox, vscodeTrace }, use, testInfo) => {
     const electronAppImpl = await (playwright as any)._toImpl(electronApp);
-    const pageImpl = await (playwright as any)._toImpl(page);
+    const pageImpl = await (playwright as any)._toImpl(workbox);
     // check recent logs or wait for URL to access VSCode test server
     const vscodeTestServerRegExp = /^VSCodeTestServer listening on (http:\/\/.*)$/;
     const process = electronAppImpl._process as cp.ChildProcess;
