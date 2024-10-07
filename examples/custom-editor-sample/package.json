@@ -54,11 +54,13 @@
 		"watch": "tsc -w -p ./"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.47.2",
 		"@types/node": "^18",
 		"@types/vscode": "^1.73.0",
 		"@typescript-eslint/eslint-plugin": "^7.14.0",
 		"@typescript-eslint/parser": "^7.14.0",
 		"eslint": "^8.26.0",
-		"typescript": "^5.5.2"
+		"typescript": "^5.5.2",
+		"vscode-test-playwright": "^0.0.1-beta"
 	}
 }
