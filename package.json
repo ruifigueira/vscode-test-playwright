@@ -1,6 +1,6 @@
 {
   "name": "vscode-test-playwright",
-  "version": "0.0.2-next",
+  "version": "0.0.1-beta",
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
