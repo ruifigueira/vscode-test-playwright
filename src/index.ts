@@ -286,15 +286,18 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
 
   _enableRecorder: [async ({ playwright, context }, use) => {
     const skip = !!process.env.CI;
+    let closePromise: Promise<void> | undefined;
     if (!skip) {
       await (context as any)._enableRecorder({
         language: 'playwright-test',
         mode: 'recording',
       });
       const contextImpl = await (playwright as any)._toImpl(context);
-      await new Promise(resolve => contextImpl.recorderAppForTest.once('close', resolve));
+      closePromise = new Promise(resolve => contextImpl.recorderAppForTest.once('close', resolve));
     }
     await use();
+    if (closePromise)
+      await closePromise;
   }, { timeout: 0 }],
 
 });
