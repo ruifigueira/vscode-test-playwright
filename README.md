@@ -91,6 +91,18 @@ npx playwright test
 
 Generated report will include playwright traces from VS Code, which can be very helpful to identify issues of locators for UI elements.
 
+## Recording a test
+
+> [!NOTE]
+> This is an experimental feature.
+
+It's possible to record actions on VS Code using Playwright's `codegen`. To launch it, simply add the `_enableRecorder` fixture to your test:
+
+```ts
+test('create file', async ({ page, _enableRecorder }) => {
+});
+```
+
 ## API
 
 The following [fixtures](https://playwright.dev/docs/test-fixtures#creating-a-fixture) are available:
