@@ -30,10 +30,10 @@ It allows both VS Code API and UI to be tested simultaneously by combining:
 
 ## Quick Start
 
-- Install `playwright@latest` and `vscode-test-playwright`
+- Install `@playwright/test` and `vscode-test-playwright`
 
 ```bash
-npm install --save-dev playwright@latest vscode-test-playwright@latest
+npm install --save-dev @playwright/test@latest vscode-test-playwright@latest
 ```
 
 - edit `playwright.config.ts`:
@@ -51,8 +51,8 @@ export default defineConfig<VSCodeTestOptions, VSCodeWorkerOptions>({
   workers: 1,
   reporter: 'html',
   use: {
-    // should point to extension output dir
-    extensionDevelopmentPath: path.join(__dirname, 'extension'),
+    // path to your extension folder, where its package.json is located
+    extensionDevelopmentPath: __dirname,
     vscodeTrace: 'on',
   },
   projects: [
