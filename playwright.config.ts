@@ -10,6 +10,7 @@ export default defineConfig<VSCodeTestOptions, VSCodeWorkerOptions>({
   workers: 1,
   reporter: 'html',
   use: {
+    trace: 'off',
     vscodeTrace: 'on',
     extensionDevelopmentPath: path.join(__dirname, 'tests', 'extension')
   },
@@ -26,6 +27,5 @@ export default defineConfig<VSCodeTestOptions, VSCodeWorkerOptions>({
         vscodeVersion: '1.92.2',
       },
     },
-
   ],
 });
