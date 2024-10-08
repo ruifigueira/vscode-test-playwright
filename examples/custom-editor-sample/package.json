@@ -54,7 +54,7 @@
 		"watch": "tsc -w -p ./"
 	},
 	"devDependencies": {
-		"@playwright/test": "^1.47.2",
+		"@playwright/test": "^1.48.0",
 		"@types/node": "^18",
 		"@types/vscode": "^1.73.0",
 		"@typescript-eslint/eslint-plugin": "^7.14.0",
