@@ -14,7 +14,7 @@ test('paw draw!', async ({ workbox, evaluateInVSCode, baseDir }) => {
   });
 
   const editorFrame = workbox.locator('iframe').contentFrame().locator('iframe').contentFrame();
-  const colorPaw = editorFrame.getByRole('button', { name: 'Green' });
+  const colorPaw = editorFrame.getByRole('button', { name: 'Red' });
   const canvas = editorFrame.locator('canvas').last();
 
   await expect(canvas).toBeVisible();

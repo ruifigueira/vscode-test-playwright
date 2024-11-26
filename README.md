@@ -9,6 +9,15 @@ It allows both VS Code API and UI to be tested simultaneously by combining:
 > [!NOTE]
 > Not to be confused with [Playwright Test for VS Code](https://github.com/microsoft/playwright-vscode).
 
+## Example
+
+Let's show some kitten love:
+
+![Paw Draw!](docs/assets/paw_draw.gif)
+
+See the example in [examples/custom-editor-sample/tests/draw.spec.ts](https://github.com/ruifigueira/vscode-test-playwright/blob/main/examples/custom-editor-sample/tests/draw.spec.ts).
+
+
 ## Core Features
 
 - Unified Test Runner:
