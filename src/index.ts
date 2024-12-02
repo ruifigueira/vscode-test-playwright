@@ -127,7 +127,7 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
 
   _vscodeInstall: [async ({ _createTempDir, vscodeVersion, extensions }, use, workerInfo) => {
     const cachePath = await _createTempDir();
-    const installBasePath = path.join(process.cwd(), '.vscode-test', `worker-${workerInfo.workerIndex}`);
+    const installBasePath = path.join(process.cwd(), '.vscode-test', `worker-${workerInfo.parallelIndex}`);
     await fs.promises.mkdir(installBasePath, { recursive: true });
     const installPath = await downloadAndUnzipVSCode({ cachePath: installBasePath, version: vscodeVersion });
     const [cliPath] = resolveCliArgsFromVSCodeExecutablePath(installPath);
