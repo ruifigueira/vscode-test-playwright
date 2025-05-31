@@ -1,6 +1,6 @@
 {
   "name": "vscode-test-playwright",
-  "version": "0.0.1-beta",
+  "version": "0.0.1-beta2",
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
@@ -20,17 +20,14 @@
     "./package.json": "./package.json"
   },
   "devDependencies": {
-    "@playwright/test": "^1.48.0",
-    "@types/node": "^22.5.0",
-    "@types/ws": "^8.5.12",
-    "typescript": "^5.5.4",
-    "vscode": "^1.1.37"
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.15.29",
+    "@types/vscode": "^1.100.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@vscode/test-electron": "^2.4.1",
-    "ws": "^8.18.0"
-  },
-  "peerDependencies": {
-    "@playwright/test": ">= 1.41.0 < 2"
+    "@vscode/test-electron": "^2.5.2",
+    "ws": "^8.18.2"
   }
 }
