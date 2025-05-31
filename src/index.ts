@@ -14,6 +14,8 @@ export type VSCodeWorkerOptions = {
   vscodeVersion: string;
   extensions?: string | string[];
   vscodeTrace: TraceMode | { mode: TraceMode, snapshots?: boolean, screenshots?: boolean, sources?: boolean, attachments?: boolean };
+  extensionsDir?: string;
+  userDataDir?: string;
 }
 
 export type VSCodeTestOptions = {
@@ -124,8 +126,10 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
   vscodeTrace: ['off', { option: true, scope: 'worker' }],
   extensionDevelopmentPath: [undefined, { option: true }],
   baseDir: [async ({ _createTempDir }, use) => await use(await _createTempDir()), { option: true }],
+  extensionsDir: [undefined, { option: true, scope: 'worker' }],
+  userDataDir: [undefined, { option: true, scope: 'worker' }],
 
-  _vscodeInstall: [async ({ _createTempDir, vscodeVersion, extensions }, use, workerInfo) => {
+  _vscodeInstall: [async ({ _createTempDir, vscodeVersion, extensions, extensionsDir, userDataDir }, use, workerInfo) => {
     const cachePath = await _createTempDir();
     const installBasePath = path.join(process.cwd(), '.vscode-test', `worker-${workerInfo.parallelIndex}`);
     await fs.promises.mkdir(installBasePath, { recursive: true });
@@ -138,8 +142,8 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
         const subProcess = cp.spawn(
           cliPath,
           [
-            `--extensions-dir=${path.join(cachePath, 'extensions')}`,
-            `--user-data-dir=${path.join(cachePath, 'user-data')}`,
+            `--extensions-dir=${extensionsDir ?? path.join(cachePath, 'extensions')}`,
+            `--user-data-dir=${userDataDir ?? path.join(cachePath, 'user-data')}`,
             ...extensions.flatMap(extension => ['--install-extension', extension])
           ],
           {
@@ -161,7 +165,7 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
   }, { timeout: 0, scope: 'worker' }],
 
   // based on https://github.com/microsoft/playwright-vscode/blob/1d855b9a7aeca783223a7a9f8e3b01efbe8e16f2/tests-integration/tests/baseTest.ts
-  electronApp: [async ({ extensionDevelopmentPath, baseDir, _vscodeInstall, vscodeTrace, trace }, use, testInfo) => {
+  electronApp: [async ({ extensionDevelopmentPath, baseDir, _vscodeInstall, vscodeTrace, trace, extensionsDir, userDataDir }, use, testInfo) => {
     const { installPath, cachePath } = _vscodeInstall;
 
     // remove all VSCODE_* environment variables, otherwise it fails to load custom webviews with the following error:
@@ -186,8 +190,8 @@ export const test = base.extend<VSCodeTestFixtures & VSCodeTestOptions & Interna
         '--skip-welcome',
         '--skip-release-notes',
         '--disable-workspace-trust',
-        `--extensions-dir=${path.join(cachePath, 'extensions')}`,
-        `--user-data-dir=${path.join(cachePath, 'user-data')}`,
+        `--extensions-dir=${extensionsDir ?? path.join(cachePath, 'extensions')}`,
+        `--user-data-dir=${userDataDir ?? path.join(cachePath, 'user-data')}`,
         `--extensionTestsPath=${path.join(__dirname, 'injected', 'index')}`,
         ...(extensionDevelopmentPath ? [`--extensionDevelopmentPath=${extensionDevelopmentPath}`] : []),
         baseDir,
