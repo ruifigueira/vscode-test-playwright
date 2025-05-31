@@ -61,6 +61,6 @@
 		"@typescript-eslint/parser": "^7.18.0",
 		"eslint": "^8.57.1",
 		"typescript": "^5.8.3",
-		"vscode-test-playwright": "^0.0.1-beta"
+		"vscode-test-playwright": "^0.0.1-beta2"
 	}
 }
