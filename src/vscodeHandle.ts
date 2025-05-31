@@ -167,8 +167,8 @@ export class VSCodeEvaluator {
       objectId: frame.guid,
       pageId: this._page.guid,
       frameId: frame.guid,
-      type: 'JSHandle',
-      method: (data as MessageRequestDataMap['invokeMethod'])?.returnHandle ? 'evaluateExpressionHandle' : 'evaluateExpression',
+      type: 'vscodeHandle',
+      method: (data as MessageRequestDataMap['invokeMethod'])?.returnHandle ? 'evaluateHandle' : 'evaluate',
       params: { op, data },
       log: [] as string[],
     };
